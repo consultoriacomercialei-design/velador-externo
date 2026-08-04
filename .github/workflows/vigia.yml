@@ -36,10 +36,7 @@ jobs:
           chk "Guardián Mac (latido)" "https://hotelelencino.com/api/status/velador"    '"guardian":"fresh"'
           if [[ -n "$FALLOS" ]]; then
             echo "FALLOS DETECTADOS:$FALLOS"
-            MSG="El vigía externo (GitHub) detectó fallos $(date -u '+%Y-%m-%d %H:%M UTC'):$FALLOS
-
-Si el fallo es 'Guardián Mac', la Mac está apagada o sin internet (la sonda local no late) — los demás servicios pueden estar bien.
-Panel: https://hotelelencino.com/api/status/velador · https://directoriosantiago.com/api/status/salud"
+            MSG=$(printf '%b' "El vigia externo (GitHub) detecto fallos $(date -u '+%Y-%m-%d %H:%M UTC'):$FALLOS\n\nSi el fallo es 'Guardian Mac', la Mac guardiana esta apagada o sin internet (los demas servicios pueden estar bien).\nPaneles: hotelelencino.com/api/status/velador y directoriosantiago.com/api/status/salud")
             curl -sS -m 20 -X POST \
               -H "x-tv-token: $TV_TOKEN" -H "Content-Type: application/json" \
               --data "$(python3 -c "import json,sys;print(json.dumps({'alerta':sys.argv[1]}))" "$MSG")" \
