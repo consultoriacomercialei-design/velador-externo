@@ -1,0 +1,49 @@
+name: Vigía externo del Velador
+# Capa EXTERNA del monitoreo de Directorio Santiago + Hotel El Encino:
+# corre en GitHub (repo público = minutos ilimitados gratis), independiente
+# de la Mac. Chequea los endpoints públicos y, ante fallo, alerta por el
+# canal de correo del hotel (dedup 6h server-side). El repo NO contiene
+# secretos: el token viaja como Actions secret.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  vigia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Rondar
+        env:
+          TV_TOKEN: ${{ secrets.TV_TOKEN }}
+        run: |
+          FALLOS=""
+          chk() {
+            local nombre="$1" url="$2" espera="$3"
+            local code
+            code=$(curl -sS -m 15 -o /tmp/body -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+            if [[ "$espera" =~ ^[0-9]+$ ]]; then
+              [[ "$code" == "$espera" ]] || FALLOS="$FALLOS\n- $nombre: HTTP $code (esperaba $espera)"
+            else
+              grep -q "$espera" /tmp/body || FALLOS="$FALLOS\n- $nombre: sin '$espera' (HTTP $code)"
+            fi
+          }
+          chk "Web Directorio"        "https://directoriosantiago.com"                  "200"
+          chk "Salud profunda"        "https://directoriosantiago.com/api/status/salud" '"status":"ok"'
+          chk "API merchants (app)"   "https://directoriosantiago.com/api/merchants"    '"merchants"'
+          chk "Web Hotel"             "https://hotelelencino.com"                       "200"
+          chk "Guardián Mac (latido)" "https://hotelelencino.com/api/status/velador"    '"guardian":"fresh"'
+          if [[ -n "$FALLOS" ]]; then
+            echo "FALLOS DETECTADOS:$FALLOS"
+            MSG="El vigía externo (GitHub) detectó fallos $(date -u '+%Y-%m-%d %H:%M UTC'):$FALLOS
+
+Si el fallo es 'Guardián Mac', la Mac está apagada o sin internet (la sonda local no late) — los demás servicios pueden estar bien.
+Panel: https://hotelelencino.com/api/status/velador · https://directoriosantiago.com/api/status/salud"
+            curl -sS -m 20 -X POST \
+              -H "x-tv-token: $TV_TOKEN" -H "Content-Type: application/json" \
+              --data "$(python3 -c "import json,sys;print(json.dumps({'alerta':sys.argv[1]}))" "$MSG")" \
+              "https://hotelelencino.com/api/status/velador"
+            exit 1
+          fi
+          echo "Todo verde 🌳"
